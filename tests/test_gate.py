@@ -5,33 +5,29 @@ from __future__ import annotations
 import pytest
 
 from verified_memory_gate import (
-    CandidateExperience,
     CommitStatus,
+    DistillContext,
+    EDVPipeline,
+    ExecuteStage,
     GateMode,
     InMemoryStore,
     MemoryGate,
     MemoryScope,
     RetrievalFilter,
 )
-
-
-@pytest.fixture
-def gate() -> MemoryGate:
-    return MemoryGate(store=InMemoryStore())
+from tests.conftest import distill_context, dual_traces, gate  # noqa: F401
 
 
 def test_commit_valid_experience(gate: MemoryGate) -> None:
-    candidate = CandidateExperience(
-        lesson="Use walk-forward split with embargo for backtests.",
+    lesson = "Use walk-forward split with embargo for backtests."
+    traces = dual_traces(lesson, trace_id="run-42", evidence=("pytest:passed",))
+    context = distill_context(
         principal="research-agent",
         scope=MemoryScope.TEAM,
-        relationship="derived_from",
-        classification="episodic",
         trace_id="run-42",
-        evidence=("pytest:passed",),
     )
 
-    result = gate.commit(candidate)
+    result = gate.commit(traces, context)
 
     assert result.status is CommitStatus.COMMITTED
     assert result.memory_id is not None
@@ -41,21 +37,18 @@ def test_commit_valid_experience(gate: MemoryGate) -> None:
         RetrievalFilter(principal="research-agent", scope="team")
     )
     assert len(stored) == 1
-    assert stored[0].lesson == candidate.lesson
+    assert stored[0].lesson == lesson
     assert stored[0].principal == "research-agent"
     assert stored[0].scope == "team"
     assert stored[0].trace_id == "run-42"
-    assert stored[0].evidence == ("pytest:passed",)
+    assert "pytest:passed" in stored[0].evidence
 
 
 def test_reject_missing_governance_tags(gate: MemoryGate) -> None:
-    candidate = CandidateExperience(
-        lesson="Some lesson",
-        principal="",
-        scope=MemoryScope.PRIVATE,
-    )
+    traces = dual_traces("Some lesson")
+    context = DistillContext(principal="", scope=MemoryScope.PRIVATE)
 
-    result = gate.commit(candidate)
+    result = gate.commit(traces, context)
 
     assert result.status is CommitStatus.REJECTED
     assert result.memory_id is None
@@ -64,41 +57,39 @@ def test_reject_missing_governance_tags(gate: MemoryGate) -> None:
 
 
 def test_reject_empty_lesson(gate: MemoryGate) -> None:
-    candidate = CandidateExperience(
-        lesson="   ",
-        principal="agent-a",
-        scope="private",
-    )
+    traces = dual_traces("   ")
+    context = distill_context(principal="agent-a", scope="private")
 
-    result = gate.commit(candidate)
+    result = gate.commit(traces, context)
 
     assert result.rejected
-    assert "lesson must be non-empty" in result.reasons
+    assert any("content must be non-empty" in r for r in result.reasons)
 
 
 def test_reject_invalid_classification(gate: MemoryGate) -> None:
-    candidate = CandidateExperience(
-        lesson="Valid text",
+    traces = dual_traces("Valid text")
+    context = distill_context(
         principal="agent-a",
         scope="private",
         classification="transcript_dump",
     )
 
-    result = gate.commit(candidate)
+    result = gate.commit(traces, context)
 
     assert result.rejected
     assert any("classification must be one of" in r for r in result.reasons)
 
 
 def test_manual_review_returns_pending() -> None:
-    gate = MemoryGate(store=InMemoryStore(), mode=GateMode.MANUAL_REVIEW)
-    candidate = CandidateExperience(
-        lesson="Awaiting human sign-off.",
-        principal="agent-a",
-        scope=MemoryScope.SHARED,
+    gate = MemoryGate(
+        store=InMemoryStore(),
+        mode=GateMode.MANUAL_REVIEW,
+        pipeline=EDVPipeline(execute=ExecuteStage(min_traces=1)),
     )
+    traces = dual_traces("Awaiting human sign-off.")
+    context = distill_context(principal="agent-a", scope=MemoryScope.SHARED)
 
-    result = gate.commit(candidate)
+    result = gate.commit(traces, context)
 
     assert result.pending
     assert result.pending_id is not None
@@ -108,15 +99,19 @@ def test_manual_review_returns_pending() -> None:
 
 
 def test_approve_pending_commits_to_store() -> None:
-    gate = MemoryGate(store=InMemoryStore(), mode=GateMode.MANUAL_REVIEW)
-    candidate = CandidateExperience(
-        lesson="Promote after review.",
+    gate = MemoryGate(
+        store=InMemoryStore(),
+        mode=GateMode.MANUAL_REVIEW,
+        pipeline=EDVPipeline(execute=ExecuteStage(min_traces=1)),
+    )
+    traces = dual_traces("Promote after review.", metadata={"source": "backtest"})
+    context = distill_context(
         principal="agent-a",
         scope=MemoryScope.TEAM,
         metadata={"source": "backtest"},
     )
 
-    pending = gate.commit(candidate)
+    pending = gate.commit(traces, context)
     assert pending.pending_id is not None
 
     approved = gate.approve(pending.pending_id)
@@ -130,27 +125,22 @@ def test_approve_pending_commits_to_store() -> None:
 
 
 def test_list_pending_filters_by_principal_and_scope() -> None:
-    gate = MemoryGate(store=InMemoryStore(), mode=GateMode.MANUAL_REVIEW)
-    gate.commit(
-        CandidateExperience(
-            lesson="Private hold",
-            principal="agent-a",
-            scope=MemoryScope.PRIVATE,
-        )
+    gate = MemoryGate(
+        store=InMemoryStore(),
+        mode=GateMode.MANUAL_REVIEW,
+        pipeline=EDVPipeline(execute=ExecuteStage(min_traces=1)),
     )
     gate.commit(
-        CandidateExperience(
-            lesson="Team hold",
-            principal="agent-a",
-            scope=MemoryScope.TEAM,
-        )
+        dual_traces("Private hold"),
+        distill_context(principal="agent-a", scope=MemoryScope.PRIVATE),
     )
     gate.commit(
-        CandidateExperience(
-            lesson="Other agent",
-            principal="agent-b",
-            scope=MemoryScope.TEAM,
-        )
+        dual_traces("Team hold"),
+        distill_context(principal="agent-a", scope=MemoryScope.TEAM),
+    )
+    gate.commit(
+        dual_traces("Other agent"),
+        distill_context(principal="agent-b", scope=MemoryScope.TEAM),
     )
 
     team_a = gate.list_pending(RetrievalFilter(principal="agent-a", scope="team"))
@@ -159,7 +149,11 @@ def test_list_pending_filters_by_principal_and_scope() -> None:
 
 
 def test_approve_unknown_pending_id_rejects() -> None:
-    gate = MemoryGate(store=InMemoryStore(), mode=GateMode.MANUAL_REVIEW)
+    gate = MemoryGate(
+        store=InMemoryStore(),
+        mode=GateMode.MANUAL_REVIEW,
+        pipeline=EDVPipeline(execute=ExecuteStage(min_traces=1)),
+    )
 
     result = gate.approve("missing-id")
 
@@ -168,46 +162,64 @@ def test_approve_unknown_pending_id_rejects() -> None:
 
 
 def test_readme_quick_start_flow() -> None:
-    gate = MemoryGate()
-    candidate = CandidateExperience(
-        lesson="Require Sharpe > 0.5 before promoting a strategy to paper trading.",
-        principal="quant-research",
-        scope=MemoryScope.TEAM,
-        relationship="derived_from",
-        classification="episodic",
-        trace_id="backtest-run-17",
-        evidence=("metric:sharpe=0.62", "pytest:passed"),
+    from verified_memory_gate import QuorumConfig, VerifierRegistry
+    from verified_memory_gate.builtin_verifiers import (
+        JsonSchemaVerifier,
+        NumericToleranceVerifier,
+        PytestExitCodeVerifier,
     )
 
-    result = gate.commit(candidate)
+    gate = MemoryGate.with_verifiers(
+        VerifierRegistry(
+            verifiers=(
+                PytestExitCodeVerifier(),
+                NumericToleranceVerifier(anchor="sharpe", expected=0.62, tolerance=0.05),
+                JsonSchemaVerifier(
+                    schema={
+                        "type": "object",
+                        "required": ("strategy_id",),
+                        "properties": {"strategy_id": {"type": "string"}},
+                    }
+                ),
+            ),
+            quorum=QuorumConfig(min_passes=2),
+        ),
+        min_traces=1,
+    )
+    lesson = "Require Sharpe > 0.5 before promoting a strategy to paper trading."
+    traces = dual_traces(
+        lesson,
+        trace_id="backtest-run-17",
+        evidence=("metric:sharpe=0.62", "pytest:passed"),
+        metadata={"strategy_id": "mom-v2"},
+    )
+    context = distill_context(
+        principal="quant-research",
+        scope=MemoryScope.TEAM,
+        trace_id="backtest-run-17",
+        metadata={"strategy_id": "mom-v2"},
+    )
+
+    result = gate.commit(traces, context)
 
     assert result.committed
     memories = gate.retrieve(RetrievalFilter(principal="quant-research", scope="team"))
     assert len(memories) == 1
-    assert memories[0].lesson == candidate.lesson
+    assert memories[0].lesson == lesson
 
 
 def test_retrieve_filters_by_principal_and_scope(gate: MemoryGate) -> None:
     gate.commit(
-        CandidateExperience(
-            lesson="Private note",
-            principal="agent-a",
-            scope=MemoryScope.PRIVATE,
-        )
+        dual_traces("Private note"),
+        distill_context(principal="agent-a", scope=MemoryScope.PRIVATE),
     )
     gate.commit(
-        CandidateExperience(
-            lesson="Team playbook",
-            principal="agent-a",
-            scope=MemoryScope.TEAM,
-        )
+        dual_traces("Team playbook"),
+        distill_context(principal="agent-a", scope=MemoryScope.TEAM),
     )
     gate.commit(
-        CandidateExperience(
-            lesson="Other agent team note",
-            principal="agent-b",
-            scope=MemoryScope.TEAM,
-        )
+        dual_traces("Other agent team note"),
+        distill_context(principal="agent-b", scope=MemoryScope.TEAM),
     )
 
     team_a = gate.retrieve(RetrievalFilter(principal="agent-a", scope="team"))
@@ -219,6 +231,8 @@ def test_retrieve_filters_by_principal_and_scope(gate: MemoryGate) -> None:
 
 
 def test_validate_returns_all_errors(gate: MemoryGate) -> None:
+    from verified_memory_gate import CandidateExperience
+
     candidate = CandidateExperience(
         lesson="",
         principal="",

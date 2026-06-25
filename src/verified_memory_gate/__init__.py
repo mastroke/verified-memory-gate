@@ -1,5 +1,23 @@
 """Verified Memory Gate — governance and verification before agent memory writes."""
 
+from verified_memory_gate.coordinator import EDVCoordinator
+from verified_memory_gate.edv import (
+    DistillContext,
+    Distiller,
+    EDVPipeline,
+    EDVPipelineResult,
+    EDVStageResult,
+    ExecuteBundle,
+    ExecuteStage,
+    ExecutorTrace,
+    RuleBasedDistiller,
+    STAGE_DISTILL,
+    STAGE_EXECUTE,
+    STAGE_VERIFY,
+    StageOutput,
+    VerifyStage,
+    WindowBinding,
+)
 from verified_memory_gate.gate import GateMode, MemoryGate
 from verified_memory_gate.models import (
     CandidateExperience,
@@ -25,6 +43,15 @@ __all__ = [
     "CommitResult",
     "CommitStatus",
     "ConsensusResult",
+    "DistillContext",
+    "Distiller",
+    "EDVCoordinator",
+    "EDVPipeline",
+    "EDVPipelineResult",
+    "EDVStageResult",
+    "ExecuteBundle",
+    "ExecuteStage",
+    "ExecutorTrace",
     "GateMode",
     "InMemoryStore",
     "MemoryEntry",
@@ -33,10 +60,17 @@ __all__ = [
     "PendingCandidate",
     "QuorumConfig",
     "RetrievalFilter",
+    "RuleBasedDistiller",
+    "STAGE_DISTILL",
+    "STAGE_EXECUTE",
+    "STAGE_VERIFY",
+    "StageOutput",
+    "VerifyStage",
     "Verifier",
     "VerifierOutcome",
     "VerifierRegistry",
     "VerifierResult",
+    "WindowBinding",
 ]
 
 __version__ = "0.1.0"

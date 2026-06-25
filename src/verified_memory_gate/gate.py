@@ -2,10 +2,23 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Callable
 from uuid import uuid4
 
+from verified_memory_gate.coordinator import RenderCallback
+from verified_memory_gate.edv import (
+    DistillContext,
+    EDVPipeline,
+    EDVPipelineResult,
+    ExecuteStage,
+    ExecutorTrace,
+    RuleBasedDistiller,
+    StageOutput,
+    WindowBinding,
+)
 from verified_memory_gate.models import (
     CandidateExperience,
     CommitResult,
@@ -33,12 +46,38 @@ class MemoryGate:
 
     store: InMemoryStore | None = None
     mode: GateMode = GateMode.AUTO_COMMIT
-    verifiers: VerifierRegistry | None = None
+    pipeline: EDVPipeline | None = None
+    bindings: tuple[WindowBinding, ...] = ()
+    on_render: RenderCallback | None = None
     _pending: dict[str, PendingCandidate] = field(default_factory=dict, repr=False)
+    _latest: EDVPipelineResult | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         if self.store is None:
             self.store = InMemoryStore()
+        if self.pipeline is None:
+            self.pipeline = EDVPipeline()
+
+    @classmethod
+    def with_verifiers(
+        cls,
+        verifiers: VerifierRegistry | None,
+        *,
+        store: InMemoryStore | None = None,
+        mode: GateMode = GateMode.AUTO_COMMIT,
+        execute: ExecuteStage | None = None,
+        min_traces: int | None = None,
+    ) -> MemoryGate:
+        """Build a gate whose verify stage uses the given verifier registry."""
+        execute_stage = execute or ExecuteStage(
+            min_traces=min_traces if min_traces is not None else 2
+        )
+        pipeline = EDVPipeline(
+            execute=execute_stage,
+            distiller=RuleBasedDistiller(),
+            verify=EDVPipeline.with_verifiers(verifiers).verify,
+        )
+        return cls(store=store, mode=mode, pipeline=pipeline)
 
     def validate(self, candidate: CandidateExperience) -> tuple[str, ...]:
         """Return validation error messages; empty tuple means valid."""
@@ -65,19 +104,33 @@ class MemoryGate:
 
         return tuple(errors)
 
-    def commit(self, candidate: CandidateExperience) -> CommitResult:
-        """Attempt to persist a candidate experience through the write gate."""
+    def commit(
+        self,
+        traces: Sequence[ExecutorTrace],
+        context: DistillContext,
+    ) -> CommitResult:
+        """Persist a memory only after Execute → Distill → Verify succeeds."""
+        trace_tuple = tuple(traces)
+        pipeline_result = self.pipeline.run(trace_tuple, context)
+        self._latest = pipeline_result
+        self._render_stage_outputs(pipeline_result)
+
+        if not pipeline_result.ok:
+            return CommitResult(
+                status=CommitStatus.REJECTED,
+                reasons=pipeline_result.reasons,
+            )
+
+        candidate = pipeline_result.candidate
+        if candidate is None:
+            return CommitResult(
+                status=CommitStatus.REJECTED,
+                reasons=("pipeline succeeded without candidate",),
+            )
+
         errors = self.validate(candidate)
         if errors:
             return CommitResult(status=CommitStatus.REJECTED, reasons=errors)
-
-        if self.verifiers is not None:
-            consensus = self.verifiers.evaluate(candidate)
-            if not consensus.passed:
-                return CommitResult(
-                    status=CommitStatus.REJECTED,
-                    reasons=consensus.reasons,
-                )
 
         if self.mode is GateMode.MANUAL_REVIEW:
             pending_id = str(uuid4())
@@ -94,6 +147,18 @@ class MemoryGate:
         entry = MemoryEntry.from_candidate(candidate)
         self.store.insert(entry)
         return CommitResult(status=CommitStatus.COMMITTED, memory_id=entry.memory_id)
+
+    def stage_output(self, stage: str) -> StageOutput:
+        """Return the latest rendered output for one EDV stage window."""
+        if self._latest is None:
+            return StageOutput(stage=stage, content=f"{stage}: idle")
+        return self._latest.output_for(stage)
+
+    def _render_stage_outputs(self, result: EDVPipelineResult) -> None:
+        if self.on_render is None or not self.bindings:
+            return
+        for binding in self.bindings:
+            self.on_render(binding.window_id, result.output_for(binding.stage))
 
     def list_pending(
         self, filters: RetrievalFilter | None = None
