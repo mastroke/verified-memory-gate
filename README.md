@@ -53,6 +53,7 @@ flowchart LR
 | Verifier registry | pytest, numeric tolerance, JSON schema | **Done** (r2) |
 | Governance envelope | ACL reads, tombstone deletion | **Done** (r4) |
 | GateMem harness | CI regression on memory policy | **Done** (r5) |
+| LangGraph hook | Post-run propose node, tool guard | **Done** (r6) |
 
 ## Why
 
@@ -148,6 +149,41 @@ assert report.passes(GateMemThresholds())  # U=1, A=0, F=0, MGS=1 on fixture sub
 print(report.score.as_dict())
 ```
 
+### LangGraph hook
+
+```python
+from verified_memory_gate import (
+    DistillContext,
+    ExecutorTrace,
+    MemoryGate,
+    MemoryScope,
+    guard_tool_call,
+    make_propose_memory_node,
+    STATE_DISTILL_CONTEXT,
+    STATE_TRACES,
+)
+
+gate = MemoryGate()
+propose_node = make_propose_memory_node(gate)
+
+state = {
+    STATE_TRACES: (
+        ExecutorTrace(executor_id="research-agent", content="Sharpe gate before paper."),
+        ExecutorTrace(executor_id="audit-agent", content="cross-check: Sharpe gate before paper."),
+    ),
+    STATE_DISTILL_CONTEXT: DistillContext(
+        principal="quant-research",
+        scope=MemoryScope.TEAM,
+    ),
+}
+patch = propose_node(state)
+if patch["memory_review_required"]:
+    print(patch["memory_rejection_reasons"])
+
+tool_patch, err = guard_tool_call(state, "save_memory", {"lesson": "bypass"})
+assert err is not None
+```
+
 ## Roadmap
 
 | ID | Milestone | Status |
@@ -157,7 +193,7 @@ print(report.score.as_dict())
 | r3 | EDV three-stage pipeline | **Done** |
 | r4 | Governance envelope (ACL, tombstones) | **Done** |
 | r5 | GateMem regression harness | **Done** |
-| r6 | LangGraph integration hook | Planned |
+| r6 | LangGraph integration hook | **Done** |
 | r7 | Local daemon and audit trail | Planned |
 
 ## Design notes
@@ -167,6 +203,7 @@ print(report.score.as_dict())
 - [ADR 0003: EDV three-stage pipeline](docs/adr/0003-edv-three-stage-pipeline.md)
 - [ADR 0004: Governance envelope](docs/adr/0004-governance-envelope.md)
 - [ADR 0005: GateMem regression harness](docs/adr/0005-gatemem-regression-harness.md)
+- [ADR 0006: LangGraph integration hook](docs/adr/0006-langgraph-integration-hook.md)
 
 ## License
 
