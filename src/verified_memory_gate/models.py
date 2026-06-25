@@ -45,11 +45,20 @@ class CandidateExperience:
 
 
 @dataclass(frozen=True, slots=True)
+class PendingCandidate:
+    """Candidate held in the manual-review inbox before persistence."""
+
+    pending_id: str
+    candidate: CandidateExperience
+
+
+@dataclass(frozen=True, slots=True)
 class CommitResult:
     """Result returned by ``MemoryGate.commit``."""
 
     status: CommitStatus
     memory_id: str | None = None
+    pending_id: str | None = None
     reasons: tuple[str, ...] = ()
 
     @property

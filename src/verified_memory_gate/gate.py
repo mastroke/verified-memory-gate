@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
+from uuid import uuid4
 
 from verified_memory_gate.models import (
     CandidateExperience,
     CommitResult,
     CommitStatus,
     MemoryEntry,
+    PendingCandidate,
     RetrievalFilter,
 )
 from verified_memory_gate.store import InMemoryStore
@@ -30,6 +32,7 @@ class MemoryGate:
 
     store: InMemoryStore | None = None
     mode: GateMode = GateMode.AUTO_COMMIT
+    _pending: dict[str, PendingCandidate] = field(default_factory=dict, repr=False)
 
     def __post_init__(self) -> None:
         if self.store is None:
@@ -67,12 +70,53 @@ class MemoryGate:
             return CommitResult(status=CommitStatus.REJECTED, reasons=errors)
 
         if self.mode is GateMode.MANUAL_REVIEW:
+            pending_id = str(uuid4())
+            self._pending[pending_id] = PendingCandidate(
+                pending_id=pending_id,
+                candidate=candidate,
+            )
             return CommitResult(
                 status=CommitStatus.PENDING,
+                pending_id=pending_id,
                 reasons=("awaiting manual review",),
             )
 
         entry = MemoryEntry.from_candidate(candidate)
+        self.store.insert(entry)
+        return CommitResult(status=CommitStatus.COMMITTED, memory_id=entry.memory_id)
+
+    def list_pending(
+        self, filters: RetrievalFilter | None = None
+    ) -> list[PendingCandidate]:
+        """Return inbox candidates awaiting manual approval."""
+        items = list(self._pending.values())
+        if filters is None:
+            return items
+
+        if filters.principal is not None:
+            items = [p for p in items if p.candidate.principal == filters.principal]
+        if filters.scope is not None:
+            items = [
+                p
+                for p in items
+                if p.candidate.normalized_scope() == filters.scope
+            ]
+        if filters.classification is not None:
+            items = [
+                p for p in items if p.candidate.classification == filters.classification
+            ]
+        return items
+
+    def approve(self, pending_id: str) -> CommitResult:
+        """Promote a pending candidate into committed storage."""
+        pending = self._pending.pop(pending_id, None)
+        if pending is None:
+            return CommitResult(
+                status=CommitStatus.REJECTED,
+                reasons=(f"unknown pending_id: {pending_id}",),
+            )
+
+        entry = MemoryEntry.from_candidate(pending.candidate)
         self.store.insert(entry)
         return CommitResult(status=CommitStatus.COMMITTED, memory_id=entry.memory_id)
 
