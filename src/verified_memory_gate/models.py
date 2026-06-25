@@ -106,9 +106,21 @@ class MemoryEntry:
 
 
 @dataclass(frozen=True, slots=True)
+class Tombstone:
+    """Deletion marker for active-forgetting semantics."""
+
+    memory_id: str
+    deleted_by: str
+    deleted_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
 class RetrievalFilter:
     """Read-side filter aligned with governance envelope tags."""
 
+    requester: str | None = None
     principal: str | None = None
     scope: str | None = None
     classification: str | None = None
+    relationship: str | None = None
+    team_id: str | None = None

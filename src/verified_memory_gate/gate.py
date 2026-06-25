@@ -195,6 +195,18 @@ class MemoryGate:
         self.store.insert(entry)
         return CommitResult(status=CommitStatus.COMMITTED, memory_id=entry.memory_id)
 
+    def forget(self, memory_id: str, principal: str) -> bool:
+        """Tombstone a memory and propagate deletion to the embedding index."""
+        return self.store.tombstone(memory_id, principal)
+
+    def bind_embedding(self, memory_id: str, vector_id: str) -> bool:
+        """Register an embedding-index mapping for a committed memory row."""
+        return self.store.bind_embedding(memory_id, vector_id)
+
+    def embedding_vector_id(self, memory_id: str) -> str | None:
+        """Return the embedding id for *memory_id*, or None when tombstoned."""
+        return self.store.embedding_vector_id(memory_id)
+
     def retrieve(self, filters: RetrievalFilter | None = None) -> list[MemoryEntry]:
-        """List committed memories, optionally filtered by governance tags."""
+        """List committed memories with principal-scoped ACL and tag filters."""
         return self.store.list(filters)

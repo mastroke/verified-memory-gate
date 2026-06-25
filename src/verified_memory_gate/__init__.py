@@ -19,6 +19,7 @@ from verified_memory_gate.edv import (
     WindowBinding,
 )
 from verified_memory_gate.gate import GateMode, MemoryGate
+from verified_memory_gate.governance import can_read, parse_leak_targets
 from verified_memory_gate.models import (
     CandidateExperience,
     CommitResult,
@@ -27,6 +28,7 @@ from verified_memory_gate.models import (
     MemoryScope,
     PendingCandidate,
     RetrievalFilter,
+    Tombstone,
 )
 from verified_memory_gate.store import InMemoryStore
 from verified_memory_gate.verifiers import (
@@ -39,6 +41,9 @@ from verified_memory_gate.verifiers import (
 )
 
 __all__ = [
+    "Tombstone",
+    "can_read",
+    "parse_leak_targets",
     "CandidateExperience",
     "CommitResult",
     "CommitStatus",
