@@ -15,6 +15,7 @@ from verified_memory_gate.models import (
     RetrievalFilter,
 )
 from verified_memory_gate.store import InMemoryStore
+from verified_memory_gate.verifiers import VerifierRegistry
 
 _VALID_CLASSIFICATIONS = frozenset({"episodic", "semantic", "procedural"})
 
@@ -32,6 +33,7 @@ class MemoryGate:
 
     store: InMemoryStore | None = None
     mode: GateMode = GateMode.AUTO_COMMIT
+    verifiers: VerifierRegistry | None = None
     _pending: dict[str, PendingCandidate] = field(default_factory=dict, repr=False)
 
     def __post_init__(self) -> None:
@@ -68,6 +70,14 @@ class MemoryGate:
         errors = self.validate(candidate)
         if errors:
             return CommitResult(status=CommitStatus.REJECTED, reasons=errors)
+
+        if self.verifiers is not None:
+            consensus = self.verifiers.evaluate(candidate)
+            if not consensus.passed:
+                return CommitResult(
+                    status=CommitStatus.REJECTED,
+                    reasons=consensus.reasons,
+                )
 
         if self.mode is GateMode.MANUAL_REVIEW:
             pending_id = str(uuid4())
