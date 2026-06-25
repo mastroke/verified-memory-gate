@@ -19,6 +19,23 @@ from verified_memory_gate.edv import (
     WindowBinding,
 )
 from verified_memory_gate.gate import GateMode, MemoryGate
+from verified_memory_gate.gatemem_episodes import (
+    SUBSET_EPISODES,
+    Checkpoint,
+    CheckpointCategory,
+    Episode,
+)
+from verified_memory_gate.gatemem_harness import (
+    CheckpointResult,
+    GateMemAgentStub,
+    GateMemThresholds,
+    HarnessReport,
+    MGSScore,
+    aggregate_mgs,
+    evaluate_checkpoint,
+    run_episode,
+    run_harness,
+)
 from verified_memory_gate.governance import can_read, parse_leak_targets
 from verified_memory_gate.models import (
     CandidateExperience,
@@ -41,9 +58,22 @@ from verified_memory_gate.verifiers import (
 )
 
 __all__ = [
+    "SUBSET_EPISODES",
+    "Checkpoint",
+    "CheckpointCategory",
+    "CheckpointResult",
+    "Episode",
+    "GateMemAgentStub",
+    "GateMemThresholds",
+    "HarnessReport",
+    "MGSScore",
     "Tombstone",
+    "aggregate_mgs",
     "can_read",
+    "evaluate_checkpoint",
     "parse_leak_targets",
+    "run_episode",
+    "run_harness",
     "CandidateExperience",
     "CommitResult",
     "CommitStatus",
