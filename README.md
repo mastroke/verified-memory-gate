@@ -25,7 +25,7 @@ flowchart LR
         ACL[Read ACL + tombstones]
     end
 
-    subgraph future [Planned layers]
+    subgraph eval [Regression]
         GM[GateMem harness]
     end
 
@@ -52,7 +52,7 @@ flowchart LR
 | Pending inbox | Hold manual-review candidates until `approve()` | Implemented (r1) |
 | Verifier registry | pytest, numeric tolerance, JSON schema | **Done** (r2) |
 | Governance envelope | ACL reads, tombstone deletion | **Done** (r4) |
-| GateMem harness | CI regression on memory policy | Planned (r5) |
+| GateMem harness | CI regression on memory policy | **Done** (r5) |
 
 ## Why
 
@@ -138,6 +138,16 @@ pip install -e ".[dev]"
 python -m pytest -q
 ```
 
+### GateMem regression (CI)
+
+```python
+from verified_memory_gate import GateMemThresholds, run_harness
+
+report = run_harness()
+assert report.passes(GateMemThresholds())  # U=1, A=0, F=0, MGS=1 on fixture subset
+print(report.score.as_dict())
+```
+
 ## Roadmap
 
 | ID | Milestone | Status |
@@ -146,7 +156,7 @@ python -m pytest -q
 | r2 | Pluggable verifier registry | **Done** |
 | r3 | EDV three-stage pipeline | **Done** |
 | r4 | Governance envelope (ACL, tombstones) | **Done** |
-| r5 | GateMem regression harness | Planned |
+| r5 | GateMem regression harness | **Done** |
 | r6 | LangGraph integration hook | Planned |
 | r7 | Local daemon and audit trail | Planned |
 
@@ -156,6 +166,7 @@ python -m pytest -q
 - [ADR 0002: Pluggable verifier registry](docs/adr/0002-pluggable-verifier-registry.md)
 - [ADR 0003: EDV three-stage pipeline](docs/adr/0003-edv-three-stage-pipeline.md)
 - [ADR 0004: Governance envelope](docs/adr/0004-governance-envelope.md)
+- [ADR 0005: GateMem regression harness](docs/adr/0005-gatemem-regression-harness.md)
 
 ## License
 

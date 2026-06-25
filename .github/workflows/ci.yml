@@ -25,3 +25,13 @@ jobs:
 
       - name: Run tests
         run: python -m pytest -q
+
+      - name: GateMem regression gate
+        run: |
+          python -c "
+          from verified_memory_gate import GateMemThresholds, run_harness
+          report = run_harness()
+          score = report.score
+          print('MGS', score.as_dict())
+          assert report.passes(GateMemThresholds()), score.as_dict()
+          "
