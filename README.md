@@ -22,10 +22,11 @@ flowchart LR
     subgraph gate [Verified Memory Gate]
         MG[MemoryGate.commit]
         ST[(InMemoryStore)]
+        ACL[Read ACL + tombstones]
     end
 
     subgraph future [Planned layers]
-        ACL[Read filters + tombstones]
+        GM[GateMem harness]
     end
 
     A1 --> EX
@@ -36,7 +37,8 @@ flowchart LR
     MG -->|committed| ST
     MG -->|rejected| REJ[Rejection reasons]
     MG -->|pending| REV[Manual review queue]
-    ST -.-> ACL
+    ST --> ACL
+    ACL -.-> GM
 ```
 
 ### Boundaries
@@ -49,7 +51,7 @@ flowchart LR
 | `InMemoryStore` | Principal/scope-indexed persistence | Implemented (r1) |
 | Pending inbox | Hold manual-review candidates until `approve()` | Implemented (r1) |
 | Verifier registry | pytest, numeric tolerance, JSON schema | **Done** (r2) |
-| Governance envelope | ACL reads, tombstone deletion | Planned (r4) |
+| Governance envelope | ACL reads, tombstone deletion | **Done** (r4) |
 | GateMem harness | CI regression on memory policy | Planned (r5) |
 
 ## Why
@@ -124,7 +126,9 @@ context = DistillContext(
 
 result = gate.commit(traces, context)
 if result.committed:
-    memories = gate.retrieve(RetrievalFilter(principal="quant-research", scope="team"))
+    memories = gate.retrieve(
+        RetrievalFilter(requester="quant-research", principal="quant-research", scope="team")
+    )
 ```
 
 Install for development:
@@ -141,7 +145,7 @@ python -m pytest -q
 | r1 | Memory write interceptor API | **Done** |
 | r2 | Pluggable verifier registry | **Done** |
 | r3 | EDV three-stage pipeline | **Done** |
-| r4 | Governance envelope (ACL, tombstones) | Planned |
+| r4 | Governance envelope (ACL, tombstones) | **Done** |
 | r5 | GateMem regression harness | Planned |
 | r6 | LangGraph integration hook | Planned |
 | r7 | Local daemon and audit trail | Planned |
@@ -151,6 +155,7 @@ python -m pytest -q
 - [ADR 0001: Write gate interceptor](docs/adr/0001-write-gate-interceptor.md)
 - [ADR 0002: Pluggable verifier registry](docs/adr/0002-pluggable-verifier-registry.md)
 - [ADR 0003: EDV three-stage pipeline](docs/adr/0003-edv-three-stage-pipeline.md)
+- [ADR 0004: Governance envelope](docs/adr/0004-governance-envelope.md)
 
 ## License
 
