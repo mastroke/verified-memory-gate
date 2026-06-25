@@ -37,6 +37,21 @@ from verified_memory_gate.gatemem_harness import (
     run_harness,
 )
 from verified_memory_gate.governance import can_read, parse_leak_targets
+from verified_memory_gate.langgraph_hook import (
+    DEFAULT_BLOCKED_MEMORY_TOOLS,
+    STATE_BLOCKED_TOOLS,
+    STATE_DISTILL_CONTEXT,
+    STATE_MEMORY_REJECTIONS,
+    STATE_MEMORY_RESULT,
+    STATE_MEMORY_REVIEW,
+    STATE_TRACES,
+    BlockedToolCall,
+    MemoryToolGuard,
+    guard_tool_call,
+    make_propose_memory_node,
+    propose_memory,
+    serialize_commit_result,
+)
 from verified_memory_gate.models import (
     CandidateExperience,
     CommitResult,
@@ -58,6 +73,19 @@ from verified_memory_gate.verifiers import (
 )
 
 __all__ = [
+    "DEFAULT_BLOCKED_MEMORY_TOOLS",
+    "STATE_BLOCKED_TOOLS",
+    "STATE_DISTILL_CONTEXT",
+    "STATE_MEMORY_REJECTIONS",
+    "STATE_MEMORY_RESULT",
+    "STATE_MEMORY_REVIEW",
+    "STATE_TRACES",
+    "BlockedToolCall",
+    "MemoryToolGuard",
+    "guard_tool_call",
+    "make_propose_memory_node",
+    "propose_memory",
+    "serialize_commit_result",
     "SUBSET_EPISODES",
     "Checkpoint",
     "CheckpointCategory",
