@@ -7,12 +7,12 @@ import pytest
 from verified_memory_gate import (
     CandidateExperience,
     CommitStatus,
+    GateMode,
     InMemoryStore,
     MemoryGate,
     MemoryScope,
     RetrievalFilter,
 )
-from verified_memory_gate.gate import GateMode
 
 
 @pytest.fixture
@@ -101,8 +101,90 @@ def test_manual_review_returns_pending() -> None:
     result = gate.commit(candidate)
 
     assert result.pending
+    assert result.pending_id is not None
     assert result.memory_id is None
     assert gate.store.count() == 0
+    assert len(gate.list_pending()) == 1
+
+
+def test_approve_pending_commits_to_store() -> None:
+    gate = MemoryGate(store=InMemoryStore(), mode=GateMode.MANUAL_REVIEW)
+    candidate = CandidateExperience(
+        lesson="Promote after review.",
+        principal="agent-a",
+        scope=MemoryScope.TEAM,
+        metadata={"source": "backtest"},
+    )
+
+    pending = gate.commit(candidate)
+    assert pending.pending_id is not None
+
+    approved = gate.approve(pending.pending_id)
+
+    assert approved.committed
+    assert approved.memory_id is not None
+    assert len(gate.list_pending()) == 0
+    stored = gate.retrieve(RetrievalFilter(principal="agent-a", scope="team"))
+    assert len(stored) == 1
+    assert stored[0].metadata == {"source": "backtest"}
+
+
+def test_list_pending_filters_by_principal_and_scope() -> None:
+    gate = MemoryGate(store=InMemoryStore(), mode=GateMode.MANUAL_REVIEW)
+    gate.commit(
+        CandidateExperience(
+            lesson="Private hold",
+            principal="agent-a",
+            scope=MemoryScope.PRIVATE,
+        )
+    )
+    gate.commit(
+        CandidateExperience(
+            lesson="Team hold",
+            principal="agent-a",
+            scope=MemoryScope.TEAM,
+        )
+    )
+    gate.commit(
+        CandidateExperience(
+            lesson="Other agent",
+            principal="agent-b",
+            scope=MemoryScope.TEAM,
+        )
+    )
+
+    team_a = gate.list_pending(RetrievalFilter(principal="agent-a", scope="team"))
+    assert len(team_a) == 1
+    assert team_a[0].candidate.lesson == "Team hold"
+
+
+def test_approve_unknown_pending_id_rejects() -> None:
+    gate = MemoryGate(store=InMemoryStore(), mode=GateMode.MANUAL_REVIEW)
+
+    result = gate.approve("missing-id")
+
+    assert result.rejected
+    assert any("unknown pending_id" in r for r in result.reasons)
+
+
+def test_readme_quick_start_flow() -> None:
+    gate = MemoryGate()
+    candidate = CandidateExperience(
+        lesson="Require Sharpe > 0.5 before promoting a strategy to paper trading.",
+        principal="quant-research",
+        scope=MemoryScope.TEAM,
+        relationship="derived_from",
+        classification="episodic",
+        trace_id="backtest-run-17",
+        evidence=("metric:sharpe=0.62", "pytest:passed"),
+    )
+
+    result = gate.commit(candidate)
+
+    assert result.committed
+    memories = gate.retrieve(RetrievalFilter(principal="quant-research", scope="team"))
+    assert len(memories) == 1
+    assert memories[0].lesson == candidate.lesson
 
 
 def test_retrieve_filters_by_principal_and_scope(gate: MemoryGate) -> None:

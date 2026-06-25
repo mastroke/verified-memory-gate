@@ -32,7 +32,7 @@ Verification (pytest exit codes, numeric tolerance, JSON schema, consensus quoru
 
 - No verification yet — valid tags alone commit, which is insufficient for production trust until r2–r3 land.
 - In-memory storage is not durable; SQLite and vector-index tombstones follow in r4.
-- `pending` is only used for manual-review mode today; async verifier queues need explicit design in r3.
+- `pending` is held in an in-memory inbox until `approve()` promotes the row; async verifier queues need explicit design in r3.
 
 ## Alternatives considered
 

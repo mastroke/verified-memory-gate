@@ -45,6 +45,7 @@ flowchart LR
 | `CandidateExperience` | Structured lesson + governance tags | Implemented |
 | `MemoryGate` | Validate tags, return commit status | Implemented (r1) |
 | `InMemoryStore` | Principal/scope-indexed persistence | Implemented (r1) |
+| Pending inbox | Hold manual-review candidates until `approve()` | Implemented (r1) |
 | Verifier registry | pytest, numeric tolerance, JSON schema | Planned (r2) |
 | EDV pipeline | Execute → Distill → Verify | Planned (r3) |
 | Governance envelope | ACL reads, tombstone deletion | Planned (r4) |
