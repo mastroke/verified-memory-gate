@@ -1,5 +1,11 @@
 """Verified Memory Gate — governance and verification before agent memory writes."""
 
+from verified_memory_gate.audit_log import (
+    AppendOnlyAuditLog,
+    AuditEventKind,
+    AuditRecord,
+    VerifierAudit,
+)
 from verified_memory_gate.coordinator import EDVCoordinator
 from verified_memory_gate.edv import (
     DistillContext,
@@ -73,6 +79,10 @@ from verified_memory_gate.verifiers import (
 )
 
 __all__ = [
+    "AppendOnlyAuditLog",
+    "AuditEventKind",
+    "AuditRecord",
+    "VerifierAudit",
     "DEFAULT_BLOCKED_MEMORY_TOOLS",
     "STATE_BLOCKED_TOOLS",
     "STATE_DISTILL_CONTEXT",

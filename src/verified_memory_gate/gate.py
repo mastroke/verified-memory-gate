@@ -8,8 +8,10 @@ from enum import Enum
 from typing import Callable
 from uuid import uuid4
 
+from verified_memory_gate.audit_log import AppendOnlyAuditLog
 from verified_memory_gate.coordinator import RenderCallback
 from verified_memory_gate.edv import (
+    STAGE_VERIFY,
     DistillContext,
     EDVPipeline,
     EDVPipelineResult,
@@ -19,6 +21,7 @@ from verified_memory_gate.edv import (
     StageOutput,
     WindowBinding,
 )
+from verified_memory_gate.verifiers import ConsensusResult
 from verified_memory_gate.models import (
     CandidateExperience,
     CommitResult,
@@ -49,6 +52,7 @@ class MemoryGate:
     pipeline: EDVPipeline | None = None
     bindings: tuple[WindowBinding, ...] = ()
     on_render: RenderCallback | None = None
+    audit_log: AppendOnlyAuditLog | None = None
     _pending: dict[str, PendingCandidate] = field(default_factory=dict, repr=False)
     _latest: EDVPipelineResult | None = field(default=None, repr=False)
 
@@ -116,21 +120,27 @@ class MemoryGate:
         self._render_stage_outputs(pipeline_result)
 
         if not pipeline_result.ok:
-            return CommitResult(
+            result = CommitResult(
                 status=CommitStatus.REJECTED,
                 reasons=pipeline_result.reasons,
             )
+            self._audit_write(context, pipeline_result, result)
+            return result
 
         candidate = pipeline_result.candidate
         if candidate is None:
-            return CommitResult(
+            result = CommitResult(
                 status=CommitStatus.REJECTED,
                 reasons=("pipeline succeeded without candidate",),
             )
+            self._audit_write(context, pipeline_result, result)
+            return result
 
         errors = self.validate(candidate)
         if errors:
-            return CommitResult(status=CommitStatus.REJECTED, reasons=errors)
+            result = CommitResult(status=CommitStatus.REJECTED, reasons=errors)
+            self._audit_write(context, pipeline_result, result)
+            return result
 
         if self.mode is GateMode.MANUAL_REVIEW:
             pending_id = str(uuid4())
@@ -138,15 +148,19 @@ class MemoryGate:
                 pending_id=pending_id,
                 candidate=candidate,
             )
-            return CommitResult(
+            result = CommitResult(
                 status=CommitStatus.PENDING,
                 pending_id=pending_id,
                 reasons=("awaiting manual review",),
             )
+            self._audit_write(context, pipeline_result, result)
+            return result
 
         entry = MemoryEntry.from_candidate(candidate)
         self.store.insert(entry)
-        return CommitResult(status=CommitStatus.COMMITTED, memory_id=entry.memory_id)
+        result = CommitResult(status=CommitStatus.COMMITTED, memory_id=entry.memory_id)
+        self._audit_write(context, pipeline_result, result)
+        return result
 
     def stage_output(self, stage: str) -> StageOutput:
         """Return the latest rendered output for one EDV stage window."""
@@ -193,11 +207,28 @@ class MemoryGate:
 
         entry = MemoryEntry.from_candidate(pending.candidate)
         self.store.insert(entry)
-        return CommitResult(status=CommitStatus.COMMITTED, memory_id=entry.memory_id)
+        result = CommitResult(status=CommitStatus.COMMITTED, memory_id=entry.memory_id)
+        self._audit_write_for_candidate(
+            pending.candidate.principal,
+            pending.candidate,
+            result,
+        )
+        return result
 
     def forget(self, memory_id: str, principal: str) -> bool:
         """Tombstone a memory and propagate deletion to the embedding index."""
-        return self.store.tombstone(memory_id, principal)
+        success = self.store.tombstone(memory_id, principal)
+        if self.audit_log is not None:
+            reasons: tuple[str, ...] = ()
+            if not success:
+                reasons = ("tombstone rejected or unknown memory_id",)
+            self.audit_log.record_deletion(
+                actor=principal,
+                memory_id=memory_id,
+                success=success,
+                reasons=reasons,
+            )
+        return success
 
     def bind_embedding(self, memory_id: str, vector_id: str) -> bool:
         """Register an embedding-index mapping for a committed memory row."""
@@ -210,3 +241,44 @@ class MemoryGate:
     def retrieve(self, filters: RetrievalFilter | None = None) -> list[MemoryEntry]:
         """List committed memories with principal-scoped ACL and tag filters."""
         return self.store.list(filters)
+
+    def _verify_consensus(
+        self, pipeline_result: EDVPipelineResult
+    ) -> ConsensusResult | None:
+        for stage in pipeline_result.stages:
+            if stage.stage == STAGE_VERIFY:
+                return stage.consensus
+        return None
+
+    def _audit_write(
+        self,
+        context: DistillContext,
+        pipeline_result: EDVPipelineResult,
+        result: CommitResult,
+    ) -> None:
+        if self.audit_log is None:
+            return
+        candidate = pipeline_result.candidate
+        if candidate is None and self._latest is not None:
+            candidate = self._latest.candidate
+        self.audit_log.record_write(
+            actor=context.principal,
+            result=result,
+            candidate=candidate,
+            consensus=self._verify_consensus(pipeline_result),
+        )
+
+    def _audit_write_for_candidate(
+        self,
+        actor: str,
+        candidate: CandidateExperience,
+        result: CommitResult,
+    ) -> None:
+        if self.audit_log is None:
+            return
+        self.audit_log.record_write(
+            actor=actor,
+            result=result,
+            candidate=candidate,
+            consensus=None,
+        )
