@@ -7,6 +7,7 @@ from verified_memory_gate.audit_log import (
     VerifierAudit,
 )
 from verified_memory_gate.coordinator import EDVCoordinator
+from verified_memory_gate.daemon import create_app
 from verified_memory_gate.edv import (
     DistillContext,
     Distiller,
@@ -83,6 +84,7 @@ __all__ = [
     "AuditEventKind",
     "AuditRecord",
     "VerifierAudit",
+    "create_app",
     "DEFAULT_BLOCKED_MEMORY_TOOLS",
     "STATE_BLOCKED_TOOLS",
     "STATE_DISTILL_CONTEXT",

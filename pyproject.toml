@@ -23,7 +23,11 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "fastapi>=0.115", "httpx>=0.27"]
+daemon = ["fastapi>=0.115", "uvicorn[standard]>=0.30"]
+
+[project.scripts]
+vmg-audit-daemon = "verified_memory_gate.daemon:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/verified_memory_gate"]
