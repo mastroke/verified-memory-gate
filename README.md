@@ -23,6 +23,11 @@ flowchart LR
         MG[MemoryGate.commit]
         ST[(InMemoryStore)]
         ACL[Read ACL + tombstones]
+        AL[AppendOnlyAuditLog]
+    end
+
+    subgraph daemon [Local daemon]
+        API[FastAPI /audit/export]
     end
 
     subgraph eval [Regression]
@@ -35,9 +40,11 @@ flowchart LR
     DI --> VE
     VE --> MG
     MG -->|committed| ST
+    MG -->|audit rows| AL
     MG -->|rejected| REJ[Rejection reasons]
     MG -->|pending| REV[Manual review queue]
     ST --> ACL
+    AL --> API
     ACL -.-> GM
 ```
 
@@ -54,6 +61,8 @@ flowchart LR
 | Governance envelope | ACL reads, tombstone deletion | **Done** (r4) |
 | GateMem harness | CI regression on memory policy | **Done** (r5) |
 | LangGraph hook | Post-run propose node, tool guard | **Done** (r6) |
+| Audit trail | Append-only write/deletion log + export | **Done** (r7) |
+| Local daemon | FastAPI compliance export over HTTP | **Done** (r7) |
 
 ## Why
 
@@ -184,6 +193,24 @@ tool_patch, err = guard_tool_call(state, "save_memory", {"lesson": "bypass"})
 assert err is not None
 ```
 
+### Audit trail and local daemon
+
+```python
+from verified_memory_gate import AppendOnlyAuditLog, MemoryGate, create_app
+
+audit = AppendOnlyAuditLog()
+gate = MemoryGate(audit_log=audit)
+# gate.commit(...) appends write rows with verifier outcomes
+# gate.forget(...) appends deletion rows
+
+print(audit.export_json())  # compliance review export
+
+# Optional HTTP export (requires pip install -e ".[daemon]")
+app = create_app(gate=gate, audit_log=audit)
+# uvicorn verified_memory_gate.daemon:create_app --factory
+# or: vmg-audit-daemon
+```
+
 ## Roadmap
 
 | ID | Milestone | Status |
@@ -194,7 +221,7 @@ assert err is not None
 | r4 | Governance envelope (ACL, tombstones) | **Done** |
 | r5 | GateMem regression harness | **Done** |
 | r6 | LangGraph integration hook | **Done** |
-| r7 | Local daemon and audit trail | Planned |
+| r7 | Local daemon and audit trail | **Done** |
 
 ## Design notes
 
@@ -204,6 +231,7 @@ assert err is not None
 - [ADR 0004: Governance envelope](docs/adr/0004-governance-envelope.md)
 - [ADR 0005: GateMem regression harness](docs/adr/0005-gatemem-regression-harness.md)
 - [ADR 0006: LangGraph integration hook](docs/adr/0006-langgraph-integration-hook.md)
+- [ADR 0007: Local daemon and audit trail](docs/adr/0007-local-daemon-audit-trail.md)
 
 ## License
 
