@@ -1,5 +1,9 @@
 # Verified Memory Gate
 
+[![CI](https://github.com/mastroke/verified-memory-gate/actions/workflows/ci.yml/badge.svg)](https://github.com/mastroke/verified-memory-gate/actions/workflows/ci.yml)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/github/license/mastroke/verified-memory-gate)](LICENSE)
+
 Intercept agent memory writes with governance tagging and verification before persistence.
 
 Agents that distill trajectories into long-term memory without a write gate amplify wrong-but-self-consistent lessons across sessions. Shared-memory setups add cross-principal leakage and undeletable ghosts in vector stores. This library sits **between executor traces and storage**, enforcing GateMem-aligned governance tags and reserving a path for EDV-style verify-before-write policies.
