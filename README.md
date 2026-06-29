@@ -82,6 +82,38 @@ See [docs/research-brief.md](docs/research-brief.md) for the full brief.
 
 ## Quick start
 
+Install and run the end-to-end demo (one committed write, one rejected at verify):
+
+```bash
+pip install -e .
+python examples/edv_commit_demo.py
+```
+
+Expected output (abbreviated):
+
+```text
+--- Committed — verify quorum passes ---
+  execute: execute: ok
+  distill: Require Sharpe > 0.5 before promoting a strategy to paper trading.
+  verify: quorum passed (pytest, sharpe tolerance, schema)
+  commit: COMMITTED  memory_id=...
+
+--- Rejected — verify quorum fails ---
+  execute: execute: ok
+  distill: Promote strategy after in-sample peak without holdout check.
+  verify: quorum failed
+  commit: REJECTED
+    reason: consensus quorum not met: 1/3 passed, need 2
+    reason: pytest_exit_code: evidence pytest:failed
+    reason: numeric_tolerance:sharpe: anchor 'sharpe' value 0.38 outside 0.62 ± 0.05
+
+Store after demo: 1 committed memory row(s)
+```
+
+The script wires heterogeneous `ExecutorTrace` inputs through Execute → Distill → Verify before `MemoryGate.commit` decides persistence. The rejected case fails verifier quorum (pytest failure and Sharpe outside tolerance); nothing is written to the store.
+
+### API usage
+
 ```python
 from verified_memory_gate import (
     DistillContext,
